@@ -1,19 +1,20 @@
 import os
 import httpx
-from transformers import AutoTokenizer, AutoModelForCausalLM
 
-MODEL_ID = os.getenv("MODEL_ID")
-tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
-model = AutoModelForCausalLM.from_pretrained(MODEL_ID)
+VLLM_BASE_URL = os.environ["VLLM_BASE_URL"].rstrip("/")
+VLLM_MODEL = os.environ["VLLM_MODEL"]
 
-async def call_vllm(payload: dict) -> dict:
+VLLM_CHAT_URL = f"{VLLM_BASE_URL}/v1/chat/completions"
+
+
+async def chat_with_vllm(payload: dict) -> dict:
     async with httpx.AsyncClient(timeout=300) as client:
-        resp = await client.post(
-            VLLM_URL,
+        response = await client.post(
+            VLLM_CHAT_URL,
             json={
-                "model": MODEL,
+                "model": VLLM_MODEL,
                 **payload,
             },
         )
-        resp.raise_for_status()
-        return resp.json()
+        response.raise_for_status()
+        return response.json()
