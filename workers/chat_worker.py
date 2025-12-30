@@ -22,6 +22,24 @@ async def worker_loop():
     print(f"🟢 GPU worker started: {CONSUMER_NAME}")
 
     while True:
+        pending = await redis_client.xpending_range(
+            STREAM_NAME,
+            GROUP_NAME,
+            min="-",
+            max="+",
+            count=10,
+        )
+    
+        for p in pending:
+            if p["idle"] > 30000:
+                await redis_client.xclaim(
+                    STREAM_NAME,
+                    GROUP_NAME,
+                    CONSUMER_NAME,
+                    min_idle_time=30000,
+                    message_ids=[p["message_id"]],
+            )
+        
         try:
             response = await redis_client.xreadgroup(
                 groupname=GROUP_NAME,
