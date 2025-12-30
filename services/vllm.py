@@ -2,6 +2,7 @@ import os
 import httpx
 from transformers import AutoTokenizer
 
+MODEL_ID = os.getenv("MODEL_ID")
 tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
 model = AutoModelForCausalLM.from_pretrained(MODEL_ID)
 
