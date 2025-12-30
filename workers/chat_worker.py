@@ -1,19 +1,25 @@
+from dotenv import load_dotenv
+import os
+
+load_dotenv(dotenv_path="/workspace/.env", override=True)
+
 import asyncio
 import json
 import socket
+from redis.exceptions import TimeoutError
 
-import redis.exceptions
-
-from app.infra.redis_client import get_redis, STREAM_NAME, GROUP_NAME
-from app.services.vllm import call_vllm
+from app.infra.redis_client import (
+    redis_client,
+    STREAM_NAME,
+    GROUP_NAME,
+)
+from app.services.vllm import chat_with_vllm
 
 CONSUMER_NAME = socket.gethostname()
 
 
 async def worker_loop():
     print(f"🟢 GPU worker started: {CONSUMER_NAME}")
-
-    redis_client = get_redis()
 
     while True:
         try:
@@ -22,7 +28,7 @@ async def worker_loop():
                 consumername=CONSUMER_NAME,
                 streams={STREAM_NAME: ">"},
                 count=1,
-                block=1000,   # short block avoids TLS hangs
+                block=5000,  # block for 5s waiting for work
             )
 
             if not response:
@@ -30,13 +36,11 @@ async def worker_loop():
 
             for _, messages in response:
                 for message_id, fields in messages:
-                    job_id = fields["job_id"]
-
                     try:
-                        print(f"📥 Processing job {job_id}")
-
                         payload = json.loads(fields["payload"])
-                        result = await call_vllm(payload)
+                        job_id = fields["job_id"]
+
+                        result = await chat_with_vllm(payload)
 
                         await redis_client.set(
                             f"chat:result:{job_id}",
@@ -50,22 +54,16 @@ async def worker_loop():
                             message_id,
                         )
 
-                        print(f"✅ Finished job {job_id}")
-
                     except Exception as e:
-                        print(f"❌ Job {job_id} failed:", e)
-                        # Not acked → stays pending
+                        print("❌ Job failed:", e)
+                        # Leave unacked → retried later
 
-        except (asyncio.TimeoutError, redis.exceptions.TimeoutError):
-            print("⚠️ Redis timeout — reconnecting")
-            await redis_client.close()
-            redis_client = get_redis()
-            await asyncio.sleep(0.5)
+        except TimeoutError:
+            # ⏱️ Normal when Redis has no messages
+            continue
 
         except Exception as e:
-            print("🔥 Fatal Redis error:", e)
-            await redis_client.close()
-            redis_client = get_redis()
+            print("🔥 Worker loop error:", e)
             await asyncio.sleep(1)
 
 
