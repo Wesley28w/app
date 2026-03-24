@@ -1,4 +1,3 @@
-dotenv
 redis
 httpx
 python-dotenv
