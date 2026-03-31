@@ -31,7 +31,7 @@ async def worker_loop():
         )
     
         for p in pending:
-            if p["idle"] > 30000:
+            if p.get("idle", 0) > 30000:
                 await redis_client.xclaim(
                     STREAM_NAME,
                     GROUP_NAME,
